@@ -13,9 +13,7 @@ where
       v
     }
   }
-}
 
-impl<T> Clamper<T> {
   pub const fn new(min: T, max: T) -> Clamper<T> {
     Self(min, max)
   }
