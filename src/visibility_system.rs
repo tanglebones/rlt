@@ -29,14 +29,7 @@ impl<'a> System<'a> for VisibilitySystem {
         .retain(|p| p.x >= 0 && p.x < width && p.y >= 0 && p.y < height);
       let option_player: Option<&Player> = player.get(entity);
       if let Some(_player) = option_player {
-        for t in map.visible_tiles.iter_mut() {
-          *t = false
-        }
-        for vis in viewshed.visible_tiles.iter() {
-          let idx = map.xy_index(vis.x, vis.y);
-          map.revealed_tiles[idx] = true;
-          map.visible_tiles[idx] = true;
-        }
+        map.visible_tiles_update(viewshed);
       } else {
         eprintln!("here?");
       }

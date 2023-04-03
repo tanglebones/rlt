@@ -1,5 +1,6 @@
 use crate::clamper::Clamper;
 use crate::rect::Rect;
+use crate::Viewshed;
 use rltk::{Algorithm2D, BTerm as Rltk, BaseMap, Point, RGB};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -16,16 +17,16 @@ pub struct Map {
   start_position: (i32, i32),
   vcw: Clamper<i32>,
   vch: Clamper<i32>,
-  pub revealed_tiles: Vec<bool>,
-  pub visible_tiles: Vec<bool>,
+  revealed_tiles: Vec<bool>,
+  visible_tiles: Vec<bool>,
 }
 
 impl Map {
-  pub fn xy_index(&self, x: i32, y: i32) -> usize {
+  fn xy_index(&self, x: i32, y: i32) -> usize {
     (y * self.width) as usize + x as usize
   }
 
-  pub fn index_xy(&self, i: usize) -> (i32, i32) {
+  fn index_xy(&self, i: usize) -> (i32, i32) {
     (
       (i % self.width as usize) as i32,
       (i / self.width as usize) as i32,
@@ -119,6 +120,17 @@ impl Map {
 
   pub fn height(&self) -> i32 {
     self.height
+  }
+
+  pub fn visible_tiles_update(&mut self, viewshed: &Viewshed) {
+    for t in self.visible_tiles.iter_mut() {
+      *t = false
+    }
+    for vis in viewshed.visible_tiles.iter() {
+      let idx = self.xy_index(vis.x, vis.y);
+      self.revealed_tiles[idx] = true;
+      self.visible_tiles[idx] = true;
+    }
   }
 }
 
