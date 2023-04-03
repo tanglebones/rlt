@@ -11,3 +11,6 @@ specs = { version = "^0", features = ["specs-derive"] }
 specs-derive = "^0"
 newtype_derive = "^0"
 custom_derive = "^0"
+num = "^0"
+num-iter = "^0"
+itertools = "^0"
