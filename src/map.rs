@@ -1,9 +1,9 @@
 use crate::clamper::Clamper;
 use crate::rect::Rect;
-use crate::Viewshed;
+use crate::{Position, Viewshed};
 use rltk::{Algorithm2D, BTerm as Rltk, BaseMap, Point, RGB};
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Tile {
   Empty,
   Floor,
@@ -19,6 +19,7 @@ pub struct Map {
   vch: Clamper<i32>,
   revealed_tiles: Vec<bool>,
   visible_tiles: Vec<bool>,
+  centers: Vec<(i32, i32)>,
 }
 
 impl Map {
@@ -48,6 +49,7 @@ impl Map {
       vcw: Clamper::new(0, width - 1),
       visible_tiles: vec![false; tile_count],
       revealed_tiles: vec![false; tile_count],
+      centers,
     };
 
     for _ in 0..8 {
@@ -55,7 +57,7 @@ impl Map {
       let ry1 = rng.roll_dice(1, height - roomsize - 1);
 
       let rect = Rect::new(rx1, ry1, roomsize - 1, roomsize - 1);
-      centers.push(rect.center());
+      map.centers.push(rect.center());
 
       for (x, y) in rect.iter() {
         let i = map.xy_index(x, y);
@@ -63,12 +65,12 @@ impl Map {
       }
     }
 
-    centers.sort();
-    map.start_position = centers[0];
+    map.centers.sort();
+    map.start_position = map.centers[0];
 
-    for i in 0..centers.len() - 1 {
-      let (ax, ay) = centers[i];
-      let (bx, by) = centers[i + 1];
+    for i in 0..map.centers.len() - 1 {
+      let (ax, ay) = map.centers[i];
+      let (bx, by) = map.centers[i + 1];
       for x in ax..=bx {
         let i = map.xy_index(x, ay);
         map.tiles[i] = Tile::Floor;
@@ -131,6 +133,14 @@ impl Map {
       self.revealed_tiles[idx] = true;
       self.visible_tiles[idx] = true;
     }
+  }
+
+  pub fn centers(&self) -> impl Iterator<Item = &(i32, i32)> {
+    self.centers.iter()
+  }
+
+  pub fn is_visible(&self, pos: &Position) -> bool {
+    self.visible_tiles[self.xy_index(pos.x, pos.y)]
   }
 }
 

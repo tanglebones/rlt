@@ -16,9 +16,9 @@ impl<'a> System<'a> for VisibilitySystem {
 
   fn run(&mut self, data: Self::SystemData) {
     let (mut map, entities, mut viewshed, pos, player) = data;
-    for (entity, viewshed, pos) in (&entities, &mut viewshed, &pos).join() {
+    for (entity, pos, viewshed) in (&entities, &pos, &mut viewshed).join() {
       if !viewshed.dirty {
-        return;
+        continue;
       }
       viewshed.visible_tiles.clear();
       viewshed.visible_tiles = field_of_view(Point::new(pos.x, pos.y), viewshed.range, &*map);
@@ -28,10 +28,9 @@ impl<'a> System<'a> for VisibilitySystem {
         .visible_tiles
         .retain(|p| p.x >= 0 && p.x < width && p.y >= 0 && p.y < height);
       let option_player: Option<&Player> = player.get(entity);
+
       if let Some(_player) = option_player {
         map.visible_tiles_update(viewshed);
-      } else {
-        eprintln!("here?");
       }
       viewshed.dirty = false;
     }

@@ -25,8 +25,9 @@ struct Renderable {
   bg: RGB,
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct Viewshed {
+  pub tag: String,
   pub visible_tiles: Vec<rltk::Point>,
   pub range: i32,
   pub dirty: bool,
@@ -51,6 +52,7 @@ fn try_move_player(delta_x: i32, delta_y: i32, world: &mut World) {
   let mut position = world.write_storage::<Position>();
   let mut player = world.write_storage::<Player>();
   let mut viewshed = world.write_storage::<Viewshed>();
+
   let map = world.fetch::<Map>();
 
   for (_player, pos, viewshed) in (&mut player, &mut position, &mut viewshed).join() {
@@ -92,7 +94,9 @@ impl GameState for LocalWorld {
     map.render(context);
 
     for (pos, render) in (&positions, &renderables).join() {
-      context.set(pos.x, pos.y, render.fg, render.bg, render.glyph);
+      if map.is_visible(pos) {
+        context.set(pos.x, pos.y, render.fg, render.bg, render.glyph);
+      }
     }
   }
 }
@@ -110,6 +114,25 @@ fn main() -> rltk::BError {
   world.register::<Player>();
   world.register::<Renderable>();
   world.register::<Viewshed>();
+
+  for (i, (x, y)) in map.centers().skip(1).copied().enumerate() {
+    world
+      .create_entity()
+      .with(Position { x, y })
+      .with(Renderable {
+        glyph: rltk::to_cp437('g'),
+        fg: RGB::named(rltk::RED),
+        bg: RGB::named(rltk::BLACK),
+      })
+      .with(Viewshed {
+        visible_tiles: Vec::new(),
+        range: 8,
+        dirty: true,
+        tag: format!("mob-{i}"),
+      })
+      .build();
+  }
+
   world.insert(map);
 
   world
@@ -119,15 +142,16 @@ fn main() -> rltk::BError {
       y: start_y,
     })
     .with(Player {})
-    .with(Viewshed {
-      visible_tiles: Vec::new(),
-      range: 8,
-      dirty: true,
-    })
     .with(Renderable {
       glyph: rltk::to_cp437('@'),
       fg: RGB::named(rltk::YELLOW),
       bg: RGB::named(rltk::BLACK),
+    })
+    .with(Viewshed {
+      visible_tiles: Vec::new(),
+      range: 8,
+      dirty: true,
+      tag: "player".to_string(),
     })
     .build();
 
