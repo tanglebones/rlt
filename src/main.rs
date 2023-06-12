@@ -1,5 +1,6 @@
 use custom_derive::custom_derive;
 use map::{Map, Tile};
+use monster_ai::MonsterAI;
 use newtype_derive::{NewtypeDeref, NewtypeDerefMut, NewtypeFrom};
 use rltk::{GameState, Rltk, RltkBuilder, VirtualKeyCode, RGB};
 use specs::prelude::*;
@@ -8,6 +9,7 @@ use visibility_system::VisibilitySystem;
 
 mod clamper;
 mod map;
+mod monster_ai;
 mod rect;
 mod visibility_system;
 
@@ -35,7 +37,9 @@ pub struct Viewshed {
 
 fn run_systems(world: &mut World) {
   let mut vis = VisibilitySystem {};
-  vis.run_now(&world);
+  vis.run_now(world);
+  let mut mai = MonsterAI {};
+  mai.run_now(world);
   world.maintain();
 }
 
@@ -48,28 +52,53 @@ custom_derive! {
 #[derive(Component, Debug)]
 pub struct Player {}
 
-fn try_move_player(delta_x: i32, delta_y: i32, world: &mut World) {
+#[derive(Component, Debug)]
+pub struct PlayerPosition {
+  x: i32,
+  y: i32,
+}
+
+#[derive(Component, Debug)]
+pub struct Monster {}
+
+#[derive(PartialEq, Copy, Clone)]
+pub enum RunState {
+  Paused,
+  Running,
+}
+
+// returns if the player moved.
+fn try_move_player(delta_x: i32, delta_y: i32, world: &mut World) -> bool {
   let mut position = world.write_storage::<Position>();
   let mut player = world.write_storage::<Player>();
+  let mut player_position = world.fetch_mut::<PlayerPosition>();
   let mut viewshed = world.write_storage::<Viewshed>();
-
   let map = world.fetch::<Map>();
 
-  for (_player, pos, viewshed) in (&mut player, &mut position, &mut viewshed).join() {
-    let (x, y) = map.clamp(pos.x + delta_x, pos.y + delta_y);
-    if map.at(x, y) == Tile::Floor {
-      pos.x = x;
-      pos.y = y;
-      viewshed.dirty = true;
-    }
+  let option = (&mut player, &mut position, &mut viewshed).join().next();
+  if option.is_none() {
+    return false;
+  }
+  let (_player, pos, viewshed) = option.unwrap();
+
+  let (x, y) = map.clamp(pos.x + delta_x, pos.y + delta_y);
+  if map.at(x, y) == Tile::Floor {
+    pos.x = x;
+    pos.y = y;
+    player_position.x = x;
+    player_position.y = y;
+    viewshed.dirty = true;
+    true
+  } else {
+    false
   }
 }
 
-fn player_input(world: &mut World, context: &mut Rltk) {
+fn player_input(world: &mut World, context: &mut Rltk) -> RunState {
   // Player movement
   let option_virtual_key_code = context.key;
   match option_virtual_key_code {
-    None => {} // Nothing happened
+    None => return RunState::Paused, // Nothing happened
     Some(virtual_key_code) => match virtual_key_code {
       VirtualKeyCode::Left | VirtualKeyCode::A => try_move_player(-1, 0, world),
       VirtualKeyCode::Right | VirtualKeyCode::E | VirtualKeyCode::D => try_move_player(1, 0, world),
@@ -77,16 +106,24 @@ fn player_input(world: &mut World, context: &mut Rltk) {
         try_move_player(0, -1, world)
       }
       VirtualKeyCode::Down | VirtualKeyCode::O | VirtualKeyCode::S => try_move_player(0, 1, world),
-      _ => {}
+      _ => return RunState::Paused,
     },
-  }
+  };
+  RunState::Running
 }
 
 impl GameState for LocalWorld {
   fn tick(&mut self, context: &mut Rltk) {
     context.cls();
-    player_input(self, context);
-    run_systems(self);
+    let run_state = self.fetch::<State>().run_state;
+
+    self.fetch_mut::<State>().run_state = match run_state {
+      RunState::Running => {
+        run_systems(self);
+        RunState::Paused
+      }
+      RunState::Paused => player_input(self, context),
+    };
 
     let positions = self.read_storage::<Position>();
     let renderables = self.read_storage::<Renderable>();
@@ -100,6 +137,11 @@ impl GameState for LocalWorld {
     }
   }
 }
+
+pub struct State {
+  pub run_state: RunState,
+}
+
 const WIDTH: i32 = 120;
 const HEIGHT: i32 = 120;
 fn main() -> rltk::BError {
@@ -108,12 +150,16 @@ fn main() -> rltk::BError {
     .build()?;
 
   let map = Map::new(WIDTH, HEIGHT);
+  let state = State {
+    run_state: RunState::Running,
+  };
   let (start_x, start_y) = map.start_position();
   let mut world = World::new();
   world.register::<Position>();
   world.register::<Player>();
   world.register::<Renderable>();
   world.register::<Viewshed>();
+  world.register::<Monster>();
 
   for (i, (x, y)) in map.centers().skip(1).copied().enumerate() {
     world
@@ -124,6 +170,7 @@ fn main() -> rltk::BError {
         fg: RGB::named(rltk::RED),
         bg: RGB::named(rltk::BLACK),
       })
+      .with(Monster {})
       .with(Viewshed {
         visible_tiles: Vec::new(),
         range: 8,
@@ -134,6 +181,11 @@ fn main() -> rltk::BError {
   }
 
   world.insert(map);
+  world.insert(state);
+  world.insert(PlayerPosition {
+    x: start_x,
+    y: start_y,
+  });
 
   world
     .create_entity()
